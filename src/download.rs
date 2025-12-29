@@ -1,9 +1,5 @@
+use super::BitCounts;
 use std::io;
-
-pub struct BitCounts {
-    pub cnt0: usize,
-    pub cnt1: usize,
-}
 
 const PAGESZ: usize = 1024;
 const BUF0: [u8; PAGESZ] = [0x00; PAGESZ];
