@@ -23,7 +23,12 @@ enum Commands {
     },
     #[command(about = "Download a file in offline mode")]
     #[command(arg_required_else_help = true)]
-    Download { cnt0: usize, cnt1: usize },
+    Download {
+        #[arg(help = "URL to download")]
+        url: String,
+        #[arg(long, help = "Write content to stdout")]
+        stdout: bool,
+    },
 }
 
 fn main() {
@@ -41,12 +46,13 @@ fn main() {
             let url = counts.to_url(basename);
             println!("{}", url);
         }
-        Commands::Download { cnt0, cnt1 } => {
-            let counts = BitCounts {
-                cnt0: cnt0,
-                cnt1: cnt1,
-            };
-            download(io::stdout(), &counts).unwrap();
+        Commands::Download { url, stdout } => {
+            let (counts, filename) = BitCounts::from_url(&url).unwrap();
+            if stdout {
+                download(io::stdout(), &counts).unwrap();
+            } else {
+                download(File::create_new(filename).unwrap(), &counts).unwrap();
+            }
         }
     }
 }
