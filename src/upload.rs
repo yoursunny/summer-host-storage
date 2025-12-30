@@ -1,7 +1,8 @@
 use super::BitCounts;
-use std::io;
-use std::io::prelude::*;
+use std::io::{self, prelude::*};
 use std::sync::OnceLock;
+use url::Url;
+const SERVER_BASE: &str = "https://summer-host-storage.yoursunny.dev";
 
 fn get_ones_table() -> &'static [u8; 256] {
     static ONES_TABLE: OnceLock<[u8; 256]> = OnceLock::new();
@@ -38,9 +39,22 @@ pub fn upload<T: io::Read>(r: T) -> Result<BitCounts, io::Error> {
     })
 }
 
+impl BitCounts {
+    pub fn to_url(&self, filename: &str) -> String {
+        let mut url = Url::parse(SERVER_BASE).unwrap();
+        let mut path = url.path_segments_mut().unwrap();
+        path.push(&format!("{:x}", self.cnt0));
+        path.push(&format!("{:x}", self.cnt1));
+        path.push(filename);
+        drop(path);
+        url.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn ones_table() {
@@ -56,7 +70,7 @@ mod tests {
     #[test]
     fn empty() {
         let input = [0u8; 0];
-        let counts = upload(io::Cursor::new(&input)).unwrap();
+        let counts = upload(Cursor::new(&input)).unwrap();
         assert_eq!(counts.cnt0, 0);
         assert_eq!(counts.cnt1, 0);
     }
@@ -66,9 +80,22 @@ mod tests {
         let ones_table = get_ones_table();
         for b in 0..256 {
             let input = [b as u8; 100_000];
-            let counts = upload(io::Cursor::new(&input)).unwrap();
+            let counts = upload(Cursor::new(&input)).unwrap();
             assert_eq!(counts.cnt1, (ones_table[b] as usize) * input.len());
             assert_eq!(counts.cnt0, 8 * input.len() - counts.cnt1);
         }
+    }
+
+    #[test]
+    fn to_url() {
+        let counts = BitCounts {
+            cnt0: 1001,
+            cnt1: 8999,
+        };
+        let url = counts.to_url("yoursunny.txt");
+        assert_eq!(
+            url,
+            "https://summer-host-storage.yoursunny.dev/3e9/2327/yoursunny.txt"
+        );
     }
 }
