@@ -31,8 +31,8 @@ enum Commands {
     },
     #[command(about = "Serve the storage server")]
     Serve {
-        #[arg(long, default_value_t = 3000, help = "Port to serve on")]
-        port: u16,
+        #[arg(long, default_value = "[::1]:3000", help = "Port to serve on")]
+        bind: String,
     },
 }
 
@@ -59,8 +59,8 @@ fn main() {
                 download(File::create_new(filename).unwrap(), &counts).unwrap();
             }
         }
-        Commands::Serve { port } => {
-            serve(port).unwrap();
+        Commands::Serve { bind } => {
+            serve(&bind);
         }
     }
 }
