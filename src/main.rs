@@ -1,5 +1,5 @@
 use std::{fs::File, io, path::Path};
-use yoursunny_summer_host_storage::{BitCounts, download, upload};
+use yoursunny_summer_host_storage::{BitCounts, download, serve, upload};
 
 use clap::{Parser, Subcommand};
 
@@ -29,6 +29,11 @@ enum Commands {
         #[arg(long, help = "Write content to stdout")]
         stdout: bool,
     },
+    #[command(about = "Serve the storage server")]
+    Serve {
+        #[arg(long, default_value_t = 3000, help = "Port to serve on")]
+        port: u16,
+    },
 }
 
 fn main() {
@@ -53,6 +58,9 @@ fn main() {
             } else {
                 download(File::create_new(filename).unwrap(), &counts).unwrap();
             }
+        }
+        Commands::Serve { port } => {
+            serve(port).unwrap();
         }
     }
 }

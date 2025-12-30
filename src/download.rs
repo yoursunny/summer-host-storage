@@ -1,4 +1,4 @@
-use super::BitCounts;
+use super::{BitCounts, SERVER_BASE};
 use std::io;
 use url::Url;
 
@@ -36,7 +36,8 @@ fn write_pages<T: io::Write>(w: &mut T, page: &[u8], n: usize) -> Result<(), io:
 
 impl BitCounts {
     pub fn from_url(url: &str) -> Option<(BitCounts, String)> {
-        let url = Url::parse(url).ok()?;
+        let base = Url::parse(SERVER_BASE).unwrap();
+        let url = base.join(url).ok()?;
         let segments: Vec<&str> = url.path_segments()?.collect();
         if segments.len() != 3 {
             return None;
@@ -85,11 +86,17 @@ mod tests {
 
     #[test]
     fn from_url_success() {
-        let url = "https://summer-host-storage.yoursunny.dev/3e9/2327/yoursunny.txt";
-        let (counts, filename) = BitCounts::from_url(url).unwrap();
-        assert_eq!(counts.cnt0, 1001);
-        assert_eq!(counts.cnt1, 8999);
-        assert_eq!(filename, "yoursunny.txt");
+        let urls = [
+            "/3e9/2327/yoursunny.txt",
+            "https://summer-host-storage.yoursunny.dev/3e9/2327/yoursunny.txt",
+            "http://[::1]:3000/3e9/2327/yoursunny.txt",
+        ];
+        for url in urls {
+            let (counts, filename) = BitCounts::from_url(url).unwrap();
+            assert_eq!(counts.cnt0, 1001);
+            assert_eq!(counts.cnt1, 8999);
+            assert_eq!(filename, "yoursunny.txt");
+        }
     }
 
     #[test]

@@ -1,8 +1,7 @@
-use super::BitCounts;
+use super::{BitCounts, SERVER_BASE};
 use std::io::{self, prelude::*};
 use std::sync::OnceLock;
 use url::Url;
-const SERVER_BASE: &str = "https://summer-host-storage.yoursunny.dev";
 
 fn get_ones_table() -> &'static [u8; 256] {
     static ONES_TABLE: OnceLock<[u8; 256]> = OnceLock::new();
