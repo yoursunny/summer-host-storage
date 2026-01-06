@@ -1,17 +1,19 @@
+use super::{BitCounts, download, upload};
 use anyhow::Result;
 use axum::{
     Router,
+    body::Bytes,
+    extract::Path,
     http::{StatusCode, Uri},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
 use axum_extra::body::AsyncReadBody;
+use std::io::Cursor;
 use tokio::{
     io::{self, AsyncWriteExt},
     net::TcpListener,
 };
-
-use super::{BitCounts, download};
 
 pub async fn serve(bind: &str) -> Result<()> {
     let app = app();
@@ -21,10 +23,12 @@ pub async fn serve(bind: &str) -> Result<()> {
 }
 
 fn app() -> Router {
-    Router::new().route("/{cnt0}/{cnt1}/{filename}", get(handler))
+    Router::new()
+        .route("/{cnt0}/{cnt1}/{filename}", get(download_handler))
+        .route("/upload/{filename}", post(upload_handler))
 }
 
-async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
+async fn download_handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
     let Some((counts, _)) = BitCounts::from_url(&uri.to_string()) else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -33,7 +37,7 @@ async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
         ("Content-Disposition", "attachment"),
         ("Content-Type", "application/octet-stream"),
     ];
-    let hdr1 = [("Content-Length", format!("{}", counts.total_bytes()))];
+    let hdr1 = [("Content-Length", counts.total_bytes().to_string())];
 
     let (receiver, mut sender) = io::simplex(8192);
     tokio::spawn(async move {
@@ -45,13 +49,21 @@ async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
     Ok((hdr0, hdr1, body))
 }
 
+async fn upload_handler(
+    Path(filename): Path<String>,
+    body: Bytes,
+) -> Result<impl IntoResponse, impl IntoResponse> {
+    let Ok(counts) = upload(Cursor::new(body)).await else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    let url = counts.to_url(&filename);
+    Ok((StatusCode::CREATED, [("Location", url)]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{
-        body::{Body, Bytes},
-        http::Request,
-    };
+    use axum::{body::Body, http::Request};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
@@ -75,5 +87,22 @@ mod tests {
             body,
             Bytes::from_owner([0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF])
         );
+    }
+
+    #[tokio::test]
+    async fn upload() {
+        let app = app();
+        let req = Request::post("/upload/yoursunny.txt")
+            .body(Body::from(Bytes::from_owner([
+                0x0F, 0xFF, 0xFC, 0x00, 0xFF, 0x71,
+            ])))
+            .unwrap();
+        let rsp = app.oneshot(req).await.unwrap();
+
+        assert_eq!(rsp.status(), StatusCode::CREATED);
+
+        let hdr = rsp.headers();
+        let location = hdr.get("Location").unwrap().to_str().unwrap();
+        assert!(location.ends_with("/12/1e/yoursunny.txt"))
     }
 }
