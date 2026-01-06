@@ -78,40 +78,51 @@ mod tests {
 
     #[tokio::test]
     async fn download() {
-        let app = app();
-        let req = Request::get("/12/1e/yoursunny.txt")
+        let req = Request::get("/22/2e/yoursunny.txt")
             .body(Body::empty())
             .unwrap();
-        let rsp = app.oneshot(req).await.unwrap();
+        let rsp = app().oneshot(req).await.unwrap();
 
         assert_eq!(rsp.status(), StatusCode::OK);
 
         let hdr = rsp.headers();
         assert_eq!(hdr.get("Content-Type").unwrap(), "application/octet-stream");
         assert_eq!(hdr.get("Content-Disposition").unwrap(), "attachment");
-        assert_eq!(hdr.get("Content-Length").unwrap(), "6");
+        assert_eq!(hdr.get("Content-Length").unwrap(), "10");
 
         let body = rsp.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(
             body,
-            Bytes::from_owner([0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF])
+            Bytes::from_owner([0x00, 0x00, 0x00, 0x00, 0x3F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
         );
     }
 
     #[tokio::test]
-    async fn upload() {
-        let app = app();
+    async fn upload_small() {
         let req = Request::post("/upload/yoursunny.txt")
-            .body(Body::from(Bytes::from_owner([
-                0x0F, 0xFF, 0xFC, 0x00, 0xFF, 0x71,
-            ])))
+            .body(String::from("@yoursunny"))
             .unwrap();
-        let rsp = app.oneshot(req).await.unwrap();
+        let rsp = app().oneshot(req).await.unwrap();
 
         assert_eq!(rsp.status(), StatusCode::CREATED);
 
         let hdr = rsp.headers();
         let location = hdr.get("Location").unwrap().to_str().unwrap();
-        assert!(location.ends_with("/12/1e/yoursunny.txt"))
+        assert!(location.ends_with("/22/2e/yoursunny.txt"))
+    }
+
+    #[tokio::test]
+    async fn upload_large() {
+        let req_body = vec![0x70u8; 7_000_000];
+        let req = Request::post("/upload/1.bin")
+            .body(Body::from(req_body))
+            .unwrap();
+        let rsp = app().oneshot(req).await.unwrap();
+
+        assert_eq!(rsp.status(), StatusCode::CREATED);
+
+        let hdr = rsp.headers();
+        let location = hdr.get("Location").unwrap().to_str().unwrap();
+        assert!(location.ends_with("/2160ec0/1406f40/1.bin"))
     }
 }

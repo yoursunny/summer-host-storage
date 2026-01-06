@@ -93,15 +93,15 @@ mod tests {
     #[test]
     fn from_url_success() {
         let urls = [
-            "/3e9/2327/yoursunny.txt",
-            "https://summer-host-storage.yoursunny.dev/3e9/2327/yoursunny.txt",
-            "http://[::1]:3000/3e9/2327/yoursunny.txt",
+            "/3e9/2327/1.bin",
+            "https://summer-host-storage.yoursunny.dev/3e9/2327/1.bin",
+            "http://[::1]:3000/3e9/2327/1.bin",
         ];
         for url in urls {
             let (counts, filename) = BitCounts::from_url(url).unwrap();
             assert_eq!(counts.cnt0, 1001);
             assert_eq!(counts.cnt1, 8999);
-            assert_eq!(filename, "yoursunny.txt");
+            assert_eq!(filename, "1.bin");
         }
     }
 
@@ -109,8 +109,8 @@ mod tests {
     fn from_url_failure() {
         let urls = [
             "https://summer-host-storage.yoursunny.dev/3e9/2327",
-            "https://summer-host-storage.yoursunny.dev/3e9/zzzz/yoursunny.txt",
-            "https://summer-host-storage.yoursunny.dev/3e9/2327/extra/yoursunny.txt",
+            "https://summer-host-storage.yoursunny.dev/3e9/zzzz/1.bin",
+            "https://summer-host-storage.yoursunny.dev/3e9/2327/extra/1.bin",
         ];
         for url in urls {
             assert!(BitCounts::from_url(url).is_none());

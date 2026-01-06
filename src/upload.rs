@@ -87,6 +87,14 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn text() {
+        let input = "@yoursunny";
+        let counts = upload(Cursor::new(&input)).await.unwrap();
+        assert_eq!(counts.cnt0, 34);
+        assert_eq!(counts.cnt1, 46);
+    }
+
+    #[tokio::test]
     async fn same_octets() {
         let ones_table = get_ones_table();
         for b in 0..=255u8 {
@@ -103,10 +111,10 @@ mod tests {
             cnt0: 1001,
             cnt1: 8999,
         };
-        let url = counts.to_url("yoursunny.txt");
+        let url = counts.to_url("1.bin");
         assert_eq!(
             url,
-            "https://summer-host-storage.yoursunny.dev/3e9/2327/yoursunny.txt"
+            "https://summer-host-storage.yoursunny.dev/3e9/2327/1.bin"
         );
     }
 }
