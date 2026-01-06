@@ -2,18 +2,18 @@ use super::{BitCounts, download, upload};
 use anyhow::Result;
 use axum::{
     Router,
-    body::Bytes,
-    extract::Path,
+    extract::{Path, Request},
     http::{StatusCode, Uri},
     response::IntoResponse,
     routing::{get, post},
 };
 use axum_extra::body::AsyncReadBody;
-use std::io::Cursor;
+use futures_util::TryStreamExt;
 use tokio::{
     io::{self, AsyncWriteExt},
     net::TcpListener,
 };
+use tokio_util::io::StreamReader;
 
 pub async fn serve(bind: &str) -> Result<()> {
     let app = app();
@@ -51,11 +51,19 @@ async fn download_handler(uri: Uri) -> Result<impl IntoResponse, impl IntoRespon
 
 async fn upload_handler(
     Path(filename): Path<String>,
-    body: Bytes,
+    req: Request,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-    let Ok(counts) = upload(Cursor::new(body)).await else {
+    use std::io;
+    let body_stream = req
+        .into_body()
+        .into_data_stream()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+    let mut reader = StreamReader::new(body_stream);
+
+    let Ok(counts) = upload(&mut reader).await else {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
+
     let url = counts.to_url(&filename);
     Ok((StatusCode::CREATED, [("Location", url)]))
 }
@@ -64,6 +72,7 @@ async fn upload_handler(
 mod tests {
     use super::*;
     use axum::{body::Body, http::Request};
+    use bytes::Bytes;
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
