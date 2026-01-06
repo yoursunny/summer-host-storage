@@ -1,3 +1,4 @@
+use anyhow::Result;
 use axum::{
     Router,
     http::{StatusCode, Uri},
@@ -12,10 +13,11 @@ use tokio::{
 
 use super::{BitCounts, download};
 
-pub async fn serve(bind: &str) {
+pub async fn serve(bind: &str) -> Result<()> {
     let app = app();
-    let listener = TcpListener::bind(bind).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = TcpListener::bind(bind).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 fn app() -> Router {
@@ -35,8 +37,9 @@ async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
 
     let (receiver, mut sender) = io::simplex(8192);
     tokio::spawn(async move {
-        download(&mut sender, &counts).await.unwrap();
-        sender.shutdown().await.unwrap();
+        download(&mut sender, &counts).await?;
+        sender.shutdown().await?;
+        Ok::<(), anyhow::Error>(())
     });
     let body = AsyncReadBody::new(receiver);
     Ok((hdr0, hdr1, body))

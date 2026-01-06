@@ -1,3 +1,4 @@
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 use std::path::Path;
 use tokio::{fs::File, io};
@@ -37,7 +38,7 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let args = Cli::parse();
 
     match args.command {
@@ -45,26 +46,35 @@ async fn main() {
             let counts = (if stdin {
                 upload(io::stdin()).await
             } else {
-                let mut file = File::open(&filename).await.unwrap();
+                let mut file = File::open(&filename).await?;
                 upload(&mut file).await
-            })
-            .unwrap();
-            let basename = Path::new(&filename).file_name().unwrap().to_str().unwrap();
+            })?;
+
+            let basename = to_basename(&filename).ok_or(anyhow!("bad filename"))?;
             let url = counts.to_url(basename);
             println!("{}", url);
         }
+
         Commands::Download { url, stdout } => {
-            let (counts, filename) = BitCounts::from_url(&url).unwrap();
+            let (counts, filename) = BitCounts::from_url(&url).ok_or(anyhow!("invalid URL"))?;
+
             if stdout {
                 download(io::stdout(), &counts).await
             } else {
-                let mut file = File::create_new(filename).await.unwrap();
+                let basename = to_basename(&filename).ok_or(anyhow!("bad filename"))?;
+                let mut file = File::create_new(basename).await?;
                 download(&mut file, &counts).await
-            }
-            .unwrap();
+            }?;
         }
+
         Commands::Serve { bind } => {
-            serve(&bind).await;
+            serve(&bind).await?;
         }
     }
+
+    Ok(())
+}
+
+fn to_basename<'a>(filename: &'a str) -> Option<&'a str> {
+    Path::new(filename).file_name()?.to_str()
 }
