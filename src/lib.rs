@@ -12,3 +12,9 @@ pub struct BitCounts {
     pub cnt0: usize,
     pub cnt1: usize,
 }
+
+impl BitCounts {
+    pub fn total_bytes(&self) -> usize {
+        return (self.cnt0 + self.cnt1) / 8;
+    }
+}

@@ -4,7 +4,11 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
-use tokio::net::TcpListener;
+use axum_extra::body::AsyncReadBody;
+use tokio::{
+    io::{self, AsyncWriteExt},
+    net::TcpListener,
+};
 
 use super::{BitCounts, download};
 
@@ -23,10 +27,19 @@ async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
         return Err(StatusCode::NOT_FOUND);
     };
 
-    let mut buf = Vec::new();
-    download(&mut buf, &counts).await.unwrap();
+    let hdr0 = [
+        ("Content-Disposition", "attachment"),
+        ("Content-Type", "application/octet-stream"),
+    ];
+    let hdr1 = [("Content-Length", format!("{}", counts.total_bytes()))];
 
-    Ok(([("Content-Disposition", "attachment")], buf))
+    let (receiver, mut sender) = io::simplex(8192);
+    tokio::spawn(async move {
+        download(&mut sender, &counts).await.unwrap();
+        sender.shutdown().await.unwrap();
+    });
+    let body = AsyncReadBody::new(receiver);
+    Ok((hdr0, hdr1, body))
 }
 
 #[cfg(test)]
@@ -48,14 +61,12 @@ mod tests {
         let rsp = app.oneshot(req).await.unwrap();
 
         assert_eq!(rsp.status(), StatusCode::OK);
-        assert_eq!(
-            rsp.headers().get("Content-Type").unwrap(),
-            "application/octet-stream"
-        );
-        assert_eq!(
-            rsp.headers().get("Content-Disposition").unwrap(),
-            "attachment"
-        );
+
+        let hdr = rsp.headers();
+        assert_eq!(hdr.get("Content-Type").unwrap(), "application/octet-stream");
+        assert_eq!(hdr.get("Content-Disposition").unwrap(), "attachment");
+        assert_eq!(hdr.get("Content-Length").unwrap(), "6");
+
         let body = rsp.into_body().collect().await.unwrap().to_bytes();
         assert_eq!(
             body,
