@@ -8,7 +8,6 @@ use tokio::net::TcpListener;
 
 use super::{BitCounts, download};
 
-#[tokio::main]
 pub async fn serve(bind: &str) {
     let app = app();
     let listener = TcpListener::bind(bind).await.unwrap();
@@ -25,7 +24,7 @@ async fn handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
     };
 
     let mut buf = Vec::new();
-    download(&mut buf, &counts).unwrap();
+    download(&mut buf, &counts).await.unwrap();
 
     Ok(([("Content-Disposition", "attachment")], buf))
 }
@@ -41,7 +40,7 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
-    async fn download_empty() {
+    async fn download() {
         let app = app();
         let req = Request::get("/12/1e/yoursunny.txt")
             .body(Body::empty())

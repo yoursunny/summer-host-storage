@@ -1,7 +1,6 @@
+use clap::{Parser, Subcommand};
 use std::{fs::File, io, path::Path};
 use yoursunny_summer_host_storage::{BitCounts, download, serve, upload};
-
-use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
 #[command(name = "yoursunny_summer_host_storage")]
@@ -36,7 +35,8 @@ enum Commands {
     },
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Cli::parse();
 
     match args.command {
@@ -52,15 +52,18 @@ fn main() {
             println!("{}", url);
         }
         Commands::Download { url, stdout } => {
+            use tokio::{fs::File, io};
             let (counts, filename) = BitCounts::from_url(&url).unwrap();
             if stdout {
-                download(io::stdout(), &counts).unwrap();
+                download(io::stdout(), &counts).await
             } else {
-                download(File::create_new(filename).unwrap(), &counts).unwrap();
+                let mut file = File::create_new(filename).await.unwrap();
+                download(&mut file, &counts).await
             }
+            .unwrap();
         }
         Commands::Serve { bind } => {
-            serve(&bind);
+            serve(&bind).await;
         }
     }
 }
