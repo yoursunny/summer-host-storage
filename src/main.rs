@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
-use std::{fs::File, io, path::Path};
+use std::path::Path;
+use tokio::{fs::File, io};
 use yoursunny_summer_host_storage::{BitCounts, download, serve, upload};
 
 #[derive(Debug, Parser)]
@@ -42,9 +43,10 @@ async fn main() {
     match args.command {
         Commands::Upload { filename, stdin } => {
             let counts = (if stdin {
-                upload(io::stdin())
+                upload(io::stdin()).await
             } else {
-                upload(File::open(&filename).unwrap())
+                let mut file = File::open(&filename).await.unwrap();
+                upload(&mut file).await
             })
             .unwrap();
             let basename = Path::new(&filename).file_name().unwrap().to_str().unwrap();
@@ -52,7 +54,6 @@ async fn main() {
             println!("{}", url);
         }
         Commands::Download { url, stdout } => {
-            use tokio::{fs::File, io};
             let (counts, filename) = BitCounts::from_url(&url).unwrap();
             if stdout {
                 download(io::stdout(), &counts).await

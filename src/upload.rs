@@ -1,6 +1,7 @@
 use super::{BitCounts, SERVER_BASE};
-use std::io::{self, prelude::*};
+use bytes::BytesMut;
 use std::sync::OnceLock;
+use tokio::io::{self, AsyncRead, AsyncReadExt, BufReader};
 use url::Url;
 
 fn get_ones_table() -> &'static [u8; 256] {
@@ -20,16 +21,27 @@ fn get_ones_table() -> &'static [u8; 256] {
     })
 }
 
-pub fn upload<T: io::Read>(r: T) -> Result<BitCounts, io::Error> {
+pub async fn upload<T: AsyncRead + Unpin>(r: T) -> Result<BitCounts, io::Error> {
     let ones_table = get_ones_table();
 
     let mut size = 0usize;
     let mut cnt1 = 0usize;
 
-    let r = io::BufReader::new(r);
-    for b in r.bytes() {
-        size += 8;
-        cnt1 += ones_table[b? as usize] as usize;
+    let mut r = BufReader::new(r);
+    let mut buf = BytesMut::with_capacity(8192);
+    loop {
+        let n = r.read_buf(&mut buf).await?;
+        if n == 0 {
+            // EOF
+            break;
+        }
+
+        for b in &buf[..] {
+            size += 8;
+            cnt1 += ones_table[*b as usize] as usize;
+        }
+
+        buf.clear();
     }
 
     Ok(BitCounts {
@@ -66,21 +78,21 @@ mod tests {
         assert_eq!(ones_table[0xFF], 8);
     }
 
-    #[test]
-    fn empty() {
+    #[tokio::test]
+    async fn empty() {
         let input = [0u8; 0];
-        let counts = upload(Cursor::new(&input)).unwrap();
+        let counts = upload(Cursor::new(&input)).await.unwrap();
         assert_eq!(counts.cnt0, 0);
         assert_eq!(counts.cnt1, 0);
     }
 
-    #[test]
-    fn same_octets() {
+    #[tokio::test]
+    async fn same_octets() {
         let ones_table = get_ones_table();
-        for b in 0..256 {
-            let input = [b as u8; 100_000];
-            let counts = upload(Cursor::new(&input)).unwrap();
-            assert_eq!(counts.cnt1, (ones_table[b] as usize) * input.len());
+        for b in 0..=255u8 {
+            let input = [b; 100_000];
+            let counts = upload(Cursor::new(&input)).await.unwrap();
+            assert_eq!(counts.cnt1, (ones_table[b as usize] as usize) * input.len());
             assert_eq!(counts.cnt0, 8 * input.len() - counts.cnt1);
         }
     }

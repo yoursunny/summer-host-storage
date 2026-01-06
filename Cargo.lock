@@ -973,6 +973,7 @@ name = "yoursunny_summer_host_storage"
 version = "0.0.0"
 dependencies = [
  "axum",
+ "bytes",
  "clap",
  "http-body-util",
  "tokio",
