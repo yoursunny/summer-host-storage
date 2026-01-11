@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="100" height="100">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="50%" style="stop-color:#FAEB92"/>
+      <stop offset="60%" style="stop-color:#2D3C59"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="100" height="100" rx="10" ry="10" fill="url(#grad1)"/>
+  <circle cx="0" cy="0" r="30" fill="#ff4136"/>
+  <circle cx="0" cy="0" r="38" fill="none" stroke="#ff4136" stroke-width="10" stroke-dasharray="3 14" stroke-dashoffset="12"/>
+  <g transform="translate(85,15), rotate(45)">
+    <circle r="10" fill="none" stroke="#5C6F2B"/>
+    <circle cx="-3" cy="-3" r="2" fill="#5C6F2B"/>
+    <circle cx="+3" cy="-3" r="2" fill="#5C6F2B"/>
+    <path d="M -5 4 A 10 15 180 0 0 5 4" fill="#5C6F2B"/>
+  </g>
+  <text y="28" fill="#000000" text-anchor="middle" style="font:10px sans-serif">
+    <tspan x="66" dy="11">yoursunny</tspan>
+    <tspan x="66" dy="11">summer host</tspan>
+  </text>
+  <text y="58" fill="#ffffff" text-anchor="middle" style="font:14px sans-serif">
+    <tspan x="50" dy="16">Deep Atlantic</tspan>
+    <tspan x="50" dy="16">Storage</tspan>
+  </text>
+</svg>
