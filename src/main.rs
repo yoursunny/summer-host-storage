@@ -1,48 +1,48 @@
 use anyhow::{Result, anyhow};
-use clap::{Parser, Subcommand};
+use bpaf::Bpaf;
 use std::path::Path;
 use tokio::{fs::File, io};
 use yoursunny_summer_host_storage::{BitCounts, download, serve, upload};
 
-#[derive(Debug, Parser)]
-#[command(name = "yoursunny_summer_host_storage")]
-#[command(about = "Deep Atlantic Storage app")]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-#[derive(Debug, Subcommand)]
-enum Commands {
-    #[command(about = "Upload a file in offline mode")]
-    #[command(arg_required_else_help = true)]
+/// Deep Atlantic Storage app
+#[derive(Debug, Clone, Bpaf)]
+#[bpaf(options, fallback_to_usage)]
+enum Action {
+    /// Upload a file in offline mode
+    #[bpaf(command, fallback_to_usage)]
     Upload {
-        #[arg(help = "Filename to upload")]
-        filename: String,
-        #[arg(long, help = "Read content from stdin")]
+        /// Read content from stdin
+        #[bpaf(switch)]
         stdin: bool,
+        /// Filename to upload
+        #[bpaf(positional("FILENAME"))]
+        filename: String,
     },
-    #[command(about = "Download a file in offline mode")]
-    #[command(arg_required_else_help = true)]
+    /// Download a file in offline mode
+    #[bpaf(command, fallback_to_usage)]
     Download {
-        #[arg(help = "URL to download")]
-        url: String,
-        #[arg(long, help = "Write content to stdout")]
+        /// Write content to stdout
+        #[bpaf(switch)]
         stdout: bool,
+        /// URL to download
+        #[bpaf(positional("URL"))]
+        url: String,
     },
-    #[command(about = "Serve the storage server")]
+    /// Serve the storage server
+    #[bpaf(command)]
     Serve {
-        #[arg(long, default_value = "[::1]:3000", help = "Port to serve on")]
+        /// Listen host:port
+        #[bpaf(argument("HOSTPORT"), fallback(String::from("[::1]:3000")))]
         bind: String,
     },
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Cli::parse();
+    let act = action().run();
 
-    match args.command {
-        Commands::Upload { filename, stdin } => {
+    match act {
+        Action::Upload { filename, stdin } => {
             let counts = (if stdin {
                 upload(io::stdin()).await
             } else {
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
             println!("{}", url);
         }
 
-        Commands::Download { url, stdout } => {
+        Action::Download { url, stdout } => {
             let (counts, filename) = BitCounts::from_url(&url).ok_or(anyhow!("invalid URL"))?;
 
             if stdout {
@@ -67,7 +67,7 @@ async fn main() -> Result<()> {
             }?;
         }
 
-        Commands::Serve { bind } => {
+        Action::Serve { bind } => {
             serve(&bind).await?;
         }
     }
