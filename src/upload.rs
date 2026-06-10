@@ -1,29 +1,21 @@
 use super::{BitCounts, SERVER_BASE};
 use bytes::BytesMut;
-use std::sync::OnceLock;
 use tokio::io::{self, AsyncRead, AsyncReadExt, BufReader};
 use url::Url;
 
-fn get_ones_table() -> &'static [u8; 256] {
-    static ONES_TABLE: OnceLock<[u8; 256]> = OnceLock::new();
-    ONES_TABLE.get_or_init(|| {
-        let mut ones = [0; 256];
-        for b in 0..256 {
-            let mut cnt = 0;
-            for s in 0..8 {
-                if (b >> s) % 2 == 1 {
-                    cnt += 1;
-                }
-            }
-            ones[b] = cnt;
-        }
-        ones
-    })
+const fn generate_ones_table() -> [u8; 256] {
+    let mut ones = [0; 256];
+    let mut b = 0;
+    while b < ones.len() {
+        ones[b] = (b as u8).count_ones() as u8;
+        b += 1;
+    }
+    ones
 }
 
-pub async fn upload<T: AsyncRead + Unpin>(r: T) -> Result<BitCounts, io::Error> {
-    let ones_table = get_ones_table();
+static ONES_TABLE: [u8; 256] = generate_ones_table();
 
+pub async fn upload<T: AsyncRead + Unpin>(r: T) -> Result<BitCounts, io::Error> {
     let mut size = 0usize;
     let mut cnt1 = 0usize;
 
@@ -38,7 +30,7 @@ pub async fn upload<T: AsyncRead + Unpin>(r: T) -> Result<BitCounts, io::Error> 
 
         for b in &buf[..] {
             size += 8;
-            cnt1 += ones_table[*b as usize] as usize;
+            cnt1 += ONES_TABLE[*b as usize] as usize;
         }
 
         buf.clear();
@@ -69,13 +61,12 @@ mod tests {
 
     #[test]
     fn ones_table() {
-        let ones_table = get_ones_table();
-        assert_eq!(ones_table[0x00], 0);
-        assert_eq!(ones_table[0x08], 1);
-        assert_eq!(ones_table[0x11], 2);
-        assert_eq!(ones_table[0x70], 3);
-        assert_eq!(ones_table[0xC3], 4);
-        assert_eq!(ones_table[0xFF], 8);
+        assert_eq!(ONES_TABLE[0x00], 0);
+        assert_eq!(ONES_TABLE[0x08], 1);
+        assert_eq!(ONES_TABLE[0x11], 2);
+        assert_eq!(ONES_TABLE[0x70], 3);
+        assert_eq!(ONES_TABLE[0xC3], 4);
+        assert_eq!(ONES_TABLE[0xFF], 8);
     }
 
     #[tokio::test]
@@ -96,11 +87,10 @@ mod tests {
 
     #[tokio::test]
     async fn same_octets() {
-        let ones_table = get_ones_table();
         for b in 0..=255u8 {
             let input = [b; 100_000];
             let counts = upload(Cursor::new(&input)).await.unwrap();
-            assert_eq!(counts.cnt1, (ones_table[b as usize] as usize) * input.len());
+            assert_eq!(counts.cnt1, (ONES_TABLE[b as usize] as usize) * input.len());
             assert_eq!(counts.cnt0, 8 * input.len() - counts.cnt1);
         }
     }
