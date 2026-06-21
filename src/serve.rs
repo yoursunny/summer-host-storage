@@ -3,9 +3,9 @@ use anyhow::Result;
 use axum::{
     Router,
     extract::{Path, Request},
-    http::{StatusCode, Uri},
-    response::IntoResponse,
-    routing::{get, post},
+    http::{Method, StatusCode, Uri},
+    response::{IntoResponse, Response},
+    routing::{get, head, post},
 };
 use axum_extra::body::AsyncReadBody;
 use futures_util::TryStreamExt;
@@ -24,20 +24,23 @@ pub async fn serve(bind: &str) -> Result<()> {
 
 fn app() -> Router {
     Router::new()
+        .route("/{cnt0}/{cnt1}/{filename}", head(download_handler))
         .route("/{cnt0}/{cnt1}/{filename}", get(download_handler))
         .route("/upload/{filename}", post(upload_handler))
 }
 
-async fn download_handler(uri: Uri) -> Result<impl IntoResponse, impl IntoResponse> {
+async fn download_handler(method: Method, uri: Uri) -> Response {
     let Some((counts, _)) = BitCounts::from_url(&uri.to_string()) else {
-        return Err(StatusCode::NOT_FOUND);
+        return StatusCode::NOT_FOUND.into_response();
     };
 
-    let hdr0 = [
-        ("Content-Disposition", "attachment"),
-        ("Content-Type", "application/octet-stream"),
-    ];
+    let hdr0 = [("Content-Type", "application/octet-stream")];
     let hdr1 = [("Content-Length", counts.total_bytes().to_string())];
+    let hdr2 = [("Content-Disposition", "attachment")];
+
+    if method == Method::HEAD {
+        return (hdr0, hdr1).into_response();
+    }
 
     let (receiver, mut sender) = io::simplex(8192);
     tokio::spawn(async move {
@@ -46,7 +49,7 @@ async fn download_handler(uri: Uri) -> Result<impl IntoResponse, impl IntoRespon
         Ok::<(), anyhow::Error>(())
     });
     let body = AsyncReadBody::new(receiver);
-    Ok((hdr0, hdr1, body))
+    (hdr0, hdr1, hdr2, body).into_response()
 }
 
 async fn upload_handler(
@@ -77,7 +80,33 @@ mod tests {
     use tower::ServiceExt;
 
     #[tokio::test]
-    async fn download() {
+    async fn download_invalid() {
+        let req = Request::get("/4444/yoursunny.txt")
+            .method(Method::HEAD)
+            .body(Body::empty())
+            .unwrap();
+        let rsp = app().oneshot(req).await.unwrap();
+
+        assert_eq!(rsp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn download_head() {
+        let req = Request::get("/22/2e/yoursunny.txt")
+            .method(Method::HEAD)
+            .body(Body::empty())
+            .unwrap();
+        let rsp = app().oneshot(req).await.unwrap();
+
+        assert_eq!(rsp.status(), StatusCode::OK);
+
+        let hdr = rsp.headers();
+        assert_eq!(hdr.get("Content-Type").unwrap(), "application/octet-stream");
+        assert_eq!(hdr.get("Content-Length").unwrap(), "10");
+    }
+
+    #[tokio::test]
+    async fn download_get() {
         let req = Request::get("/22/2e/yoursunny.txt")
             .body(Body::empty())
             .unwrap();
