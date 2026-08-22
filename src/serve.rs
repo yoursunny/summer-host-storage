@@ -1,18 +1,15 @@
-use super::{BitCounts, download, upload};
+use super::{BitCounts, download_stream, upload};
 use anyhow::Result;
 use axum::{
     Router,
+    body::Body,
     extract::{Path, Request},
     http::{Method, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, head, post},
 };
-use axum_extra::body::AsyncReadBody;
 use futures_util::TryStreamExt;
-use tokio::{
-    io::{self, AsyncWriteExt},
-    net::TcpListener,
-};
+use tokio::net::TcpListener;
 use tokio_util::io::StreamReader;
 
 pub async fn serve(bind: &str) -> Result<()> {
@@ -42,13 +39,7 @@ async fn download_handler(method: Method, uri: Uri) -> Response {
         return (hdr0, hdr1).into_response();
     }
 
-    let (receiver, mut sender) = io::simplex(8192);
-    tokio::spawn(async move {
-        download(&mut sender, &counts).await?;
-        sender.shutdown().await?;
-        Ok::<(), anyhow::Error>(())
-    });
-    let body = AsyncReadBody::new(receiver);
+    let body = Body::from_stream(download_stream(&counts));
     (hdr0, hdr1, hdr2, body).into_response()
 }
 

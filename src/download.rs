@@ -1,43 +1,68 @@
 use super::{BitCounts, SERVER_BASE};
-use tokio::io::{self, AsyncWrite, AsyncWriteExt, BufWriter};
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt, stream};
+use std::{cmp::min, convert::Infallible};
+use tokio::io::{self, AsyncWrite, AsyncWriteExt};
 use url::Url;
 
 const PAGESZ: usize = 1024;
 const BUF0: [u8; PAGESZ] = [0x00; PAGESZ];
 const BUF1: [u8; PAGESZ] = [0xFF; PAGESZ];
 
-pub async fn download<T: AsyncWrite + Unpin>(w: T, counts: &BitCounts) -> Result<(), io::Error> {
-    let bytes0 = counts.cnt0 / 8;
-    let bytes1 = counts.cnt1 / 8;
-    let middle0 = counts.cnt0 % 8;
-    let middle1 = counts.cnt1 % 8;
-    let pages0 = bytes0 / PAGESZ;
-    let pages1 = bytes1 / PAGESZ;
-    let bytes0 = bytes0 - pages0 * PAGESZ;
-    let bytes1 = bytes1 - pages1 * PAGESZ;
-
-    let mut w = BufWriter::new(w);
-    write_pages(&mut w, &BUF0, pages0).await?;
-    write_pages(&mut w, &BUF0[..bytes0], 1).await?;
-    if middle0 + middle1 > 0 {
-        let b = [(0xFFu8 >> middle0)];
-        write_pages(&mut w, &b, 1).await?;
+pub async fn download<T: AsyncWrite + Unpin>(
+    mut w: T,
+    counts: &BitCounts,
+) -> Result<(), io::Error> {
+    let mut stream = download_stream(counts);
+    while let Some(Ok(chunk)) = stream.next().await {
+        w.write_all(&chunk).await?;
     }
-    write_pages(&mut w, &BUF1[..bytes1], 1).await?;
-    write_pages(&mut w, &BUF1, pages1).await?;
     w.flush().await?;
     Ok(())
 }
 
-async fn write_pages<T: AsyncWrite + Unpin>(
-    w: &mut T,
-    page: &[u8],
-    n: usize,
-) -> Result<(), io::Error> {
-    for _ in 0..n {
-        w.write_all(page).await?;
-    }
-    Ok(())
+pub fn download_stream(
+    counts: &BitCounts,
+) -> impl Stream<Item = Result<Bytes, Infallible>> + Unpin + 'static {
+    let stream = stream::unfold(*counts, |counts| async move {
+        let bytes0 = counts.cnt0 / 8;
+        let bytes1 = counts.cnt1 / 8;
+        let middle0 = counts.cnt0 % 8;
+        let middle1 = counts.cnt1 % 8;
+
+        if bytes0 > 0 {
+            let n = min(PAGESZ, bytes0);
+            return Some((
+                Ok(Bytes::from_static(&BUF0[..n])),
+                BitCounts {
+                    cnt0: counts.cnt0 - 8 * n,
+                    cnt1: counts.cnt1,
+                },
+            ));
+        }
+        if middle0 + middle1 > 0 {
+            let b = [(0xFFu8 >> middle0)];
+            return Some((
+                Ok(Bytes::copy_from_slice(&b)),
+                BitCounts {
+                    cnt0: 0,
+                    cnt1: counts.cnt1 - middle1,
+                },
+            ));
+        }
+        if bytes1 > 0 {
+            let n = min(PAGESZ, bytes1);
+            return Some((
+                Ok(Bytes::from_static(&BUF1[..n])),
+                BitCounts {
+                    cnt0: 0,
+                    cnt1: counts.cnt1 - 8 * n,
+                },
+            ));
+        }
+        return None;
+    });
+    Box::pin(stream)
 }
 
 impl BitCounts {
