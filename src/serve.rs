@@ -3,12 +3,13 @@ use anyhow::Result;
 use axum::{
     Router,
     body::Body,
-    extract::{Path, Request},
+    extract::Path,
     http::{Method, StatusCode, Uri},
     response::{IntoResponse, Response},
     routing::{get, head, post},
 };
 use futures_util::TryStreamExt;
+use std::io;
 use tokio::net::TcpListener;
 use tokio_util::io::StreamReader;
 
@@ -45,13 +46,9 @@ async fn download_handler(method: Method, uri: Uri) -> Response {
 
 async fn upload_handler(
     Path(filename): Path<String>,
-    req: Request,
+    body: Body,
 ) -> Result<impl IntoResponse, impl IntoResponse> {
-    use std::io;
-    let body_stream = req
-        .into_body()
-        .into_data_stream()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e));
+    let body_stream = body.into_data_stream().map_err(io::Error::other);
     let mut reader = StreamReader::new(body_stream);
 
     let Ok(counts) = upload(&mut reader).await else {
